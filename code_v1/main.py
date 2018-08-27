@@ -10,7 +10,7 @@ from dataGenerator import DataGenerator
 flags = tf.app.flags
 # Learning params
 flags.DEFINE_integer("epoch", 1000, "Epoch to train [100]")
-flags.DEFINE_float("learning_rate", 0.001, "Learning rate of for adam [0.01]")
+flags.DEFINE_float("learning_rate", 0.01, "Learning rate of for adam [0.01]")
 flags.DEFINE_integer("batch_size", 128, "The size of batch images [128]")
 
 # Network params
@@ -27,7 +27,7 @@ FLAGS = flags.FLAGS
 
 # TF placeholder for graph input and output
 images = tf.placeholder(tf.float32, [FLAGS.batch_size, 64, 64, 3], name = 'images')
-source_labels = tf.placeholder(tf.float32, [FLAGS.batch_size, FLAGS.source_classes_num], name = 'source_labels')
+source_labels = tf.placeholder(tf.float32, [FLAGS.batch_size, FLAGS.resample_classes_num], name = 'source_labels')
 resample_labels = tf.placeholder(tf.float32, [FLAGS.batch_size, FLAGS.resample_classes_num], name = 'resample_labels')
 
 # set train operations
@@ -42,25 +42,39 @@ def main(_):
     resample_pred = model.resample_pred
 
     # List of trainable variables of the layers we want to train
-    feature_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='extract_feature')
-    # source_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='camera_source_discriminator')
-    resample_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='resample_operation_discriminator')
-    #var_list = tf.trainable_variables()
+    #feature_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='extract_feature')
+    #source_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='camera_source_discriminator')
+    #resample_var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='resample_operation_discriminator')
+    val_list = tf.trainable_variables()
 
     # Op for calculating the loss
     with tf.name_scope("cross_ent"):
         # non_resample_labels = tf.constant(0.2, shape = ([FLAGS.batch_size, FLAGS.resample_classes_num]))
         #feature_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = resample_logits, labels = non_resample_labels));
-        # source_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = source_logits, labels = source_labels))
-        resample_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = resample_logits, labels = resample_labels))
+        #source_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = source_logits, labels = source_labels))
+        # resample_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = resample_logits, labels = resample_labels))
+        class_weigh = tf.range(0, FLAGS.resample_classes_num, 1, tf.float32)
+        class_weigh = tf.tile(class_weigh, [FLAGS.batch_size])
+        class_weigh = tf.reshape(class_weigh, shape=[FLAGS.batch_size, FLAGS.resample_classes_num])
+        true_label = tf.cast(tf.reshape(tf.argmax(resample_labels, 1), [FLAGS.batch_size,1]), tf.float32)
+        final_weigh = tf.square(tf.subtract(class_weigh, true_label))
+        pred_dif = tf.square(model.resample_pred - resample_labels)
+        resample_loss = tf.reduce_mean(tf.reduce_sum(tf.cast(pred_dif*final_weigh, tf.float32), 1))
         #feature_loss =tf.log(tf.div(resample_loss, source_loss))
 
     # with tf.name_scope("train_source"):
     #     # Get gradients of all trainable variables
-    #     source_gradients = tf.gradients(source_loss, source_var_list + feature_var_list)
-    #     source_gradients = list(zip(source_gradients, source_var_list + feature_var_list))
+    #     source_gradients = tf.gradients(source_loss, val_list)
+    #     source_gradients = list(zip(source_gradients, val_list))
     #     # Create optimizer and apply gradient descent to the trainable variables
-    #     source_optimizer = tf.train.MomentumOptimizer(learning_rate = FLAGS.learning_rate, momentum = 0.9).minimize(source_loss, var_list = source_var_list + feature_var_list)
+    #     source_optimizer = tf.train.MomentumOptimizer(learning_rate = FLAGS.learning_rate, momentum=0.9).minimize(source_loss)
+    with tf.name_scope("train_resample"):
+        # Get gradients of all trainable variables
+        resample_gradients = tf.gradients(resample_loss, val_list)
+        resample_gradients = list(zip(resample_gradients, val_list))
+        # Create optimizer and apply gradient descent to the trainable variables
+        resample_optimizer = tf.train.MomentumOptimizer(learning_rate = FLAGS.learning_rate, momentum=0.9).minimize(resample_loss)
+
 
     # Train op_
     # with tf.name_scope("train_feature"):
@@ -77,13 +91,12 @@ def main(_):
     #     # Create optimizer and apply gradient descent to the trainable variables
     #     source_optimizer = tf.train.AdamOptimizer(learning_rate = FLAGS.learning_rate).minimize(source_loss, var_list= source_var_list + feature_var_list)
 
-    with tf.name_scope("train_resample"):
-        # Get gradients of all trainable variables
-        resample_gradients = tf.gradients(resample_loss, resample_var_list+feature_var_list)
-        resample_gradients = list(zip(resample_gradients, resample_var_list+feature_var_list))
-        # Create optimizer and apply gradient descent to the trainable variables
-        #resample_optimizer = tf.train.MomentumOptimizer(learning_rate = FLAGS.learning_rate, momentum = 0.9).minimize(resample_loss, var_list=resample_var_list + feature_var_list)
-        resample_optimizer = tf.train.AdamOptimizer(learning_rate = FLAGS.learning_rate).minimize(resample_loss, var_list=resample_var_list + feature_var_list)
+    # with tf.name_scope("train_resample"):
+    #     # Get gradients of all trainable variables
+    #     resample_gradients = tf.gradients(resample_loss, resample_var_list+feature_var_list)
+    #     resample_gradients = list(zip(resample_gradients, resample_var_list+feature_var_list))
+    #     # Create optimizer and apply gradient descent to the trainable variables
+    #     resample_optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate).minimize(resample_loss, var_list=resample_var_list + feature_var_list)
 
     # Add gradients to summary
     # for feature_gradient, feature_var in feature_gradients:
@@ -96,15 +109,14 @@ def main(_):
     #     tf.summary.histogram(resample_var.name + '/resample_gradient', resample_gradient)
     #
     # # Add the variables we train to the summary
-    for var in feature_var_list:
-        tf.summary.histogram(var.name, var)
-
+    # for var in feature_var_list:
+    #     tf.summary.histogram(var.name, var)
+    #
     # for var in source_var_list:
     #     tf.summary.histogram(var.name, var)
-
-    for var in resample_var_list:
-        tf.summary.histogram(var.name, var)
-
+    #
+    # for var in resample_var_list:
+    #     tf.summary.histogram(var.name, var)
 
     # Add the loss to summary
     # tf.summary.scalar('feature_cross_entropy', feature_loss)
@@ -120,15 +132,15 @@ def main(_):
       resample_correct_pred = tf.equal(tf.argmax(resample_pred, 1), tf.argmax(resample_labels, 1))
       resample_accuracy = tf.reduce_mean(tf.cast(resample_correct_pred, tf.float32))
 
-    with tf.name_scope("resample_test_accuracy"):
-      resample_test_correct_pred_1 = tf.equal(tf.argmax(resample_pred, 1), tf.argmax(resample_labels, 1))
-      resample_test_correct_pred_2 = tf.equal(tf.argmax(resample_pred, 1), tf.argmax(resample_labels, 1)+1)
-      resample_test_accuracy_1 = tf.reduce_mean(tf.cast(resample_test_correct_pred_1, tf.float32))
-      resample_test_accuracy_2 = tf.reduce_mean(tf.cast(resample_test_correct_pred_2, tf.float32))
-      resample_test_accuracy = tf.add(resample_test_accuracy_1, resample_test_accuracy_2)
+    # with tf.name_scope("resample_test_accuracy"):
+    #   resample_test_correct_pred_1 = tf.equal(tf.argmax(resample_pred, 1), tf.argmax(resample_labels, 1))
+    #   resample_test_correct_pred_2 = tf.equal(tf.argmax(resample_pred, 1), tf.argmax(resample_labels, 1)+1)
+    #   resample_test_accuracy_1 = tf.reduce_mean(tf.cast(resample_test_correct_pred_1, tf.float32))
+    #   resample_test_accuracy_2 = tf.reduce_mean(tf.cast(resample_test_correct_pred_2, tf.float32))
+    #   resample_test_accuracy = tf.add(resample_test_accuracy_1, resample_test_accuracy_2)
 
     # Add the accuracy to the summary
-    # tf.summary.scalar('source_accuracy', source_accuracy)
+    #tf.summary.scalar('source_accuracy', source_accuracy)
     tf.summary.scalar('resample_accuracy', resample_accuracy)
 
     # Merge all summaries together
@@ -169,8 +181,10 @@ def main(_):
 
                 # Loop over number of epochs
                 print("{} Epoch number: {}".format(datetime.now(), epoch+1))
-                if epoch % 10 == 0:
+                if epoch == 10:
                     FLAGS.learning_rate = FLAGS.learning_rate / 2
+                if epoch % 50 == 0:
+                    FLAGS.learning_rate = FLAGS.learning_rate / 5
                 step = 1
                 source_train_acc = 0.0
                 resample_train_acc = 0.0
@@ -195,10 +209,8 @@ def main(_):
                     #                        resample_labels: resample_labels_})
 
                     resample_train_acc += resample_acc
-                    # source_train_acc += source_acc
+                    #source_train_acc += source_acc
                     train_count += 1
-                    # if epoch % 5 == 0:
-                    #     print("{}".format(source_loss_))
                     # Generate summary with the current batch of data and write to file
                     if step % FLAGS.display_step == 0:
                         s = sess.run(merged_summary, feed_dict = {images: images_,
@@ -209,11 +221,12 @@ def main(_):
                         #                                           resample_labels: resample_labels_})
                         train_writer.add_summary(s, epoch*train_batches_per_epoch + step)
                     step += 1
-                    #print("{}".format(resample_labels_))
+                    # if epoch == 10:
+                    #     print("{}".format(loss_))
 
                 source_train_acc /= train_count
                 resample_train_acc /= train_count
-                # print("{} Train source Accuracy = {:.4f}".format(datetime.now(), source_train_acc))
+                print("{} Train source Accuracy = {:.4f}".format(datetime.now(), source_train_acc))
                 print("{} Train resample Accuracy = {:.4f}".format(datetime.now(), resample_train_acc))
 
                 # Validate the model on the entire validation set
@@ -231,16 +244,18 @@ def main(_):
                     #                                             resample_labels: val_resample_labels_})
                     # source_test_acc += source_acc
                     # resample_test_acc += resample_acc
-                    # source_acc = sess.run(source_accuracy, feed_dict = {images: val_images_,
-                    #                                             source_labels: val_source_labels_})
+                    # source_acc = sess.run(source_accuracy,
+                    #                                 feed_dict = {images: val_images_,
+                    #                                             source_labels: val_resample_labels_})
                     # source_test_acc += source_acc
-                    resample_acc = sess.run(resample_test_accuracy, feed_dict = {images: val_images_,
+                    # test_count += 1
+                    resample_acc = sess.run(resample_accuracy,
+                                                    feed_dict = {images: val_images_,
                                                                 resample_labels: val_resample_labels_})
-
                     resample_test_acc += resample_acc
                     test_count += 1
                     # Generate summary with the current batch of data and write to file
-                    if step % 40 == 0:
+                    if step % 10 == 0:
                         s = sess.run(merged_summary,
                                      feed_dict = {images: val_images_,
                                                   resample_labels: val_resample_labels_})
@@ -251,10 +266,10 @@ def main(_):
                         test_writer.add_summary(s, epoch*val_batches_per_epoch + step)
                     step += 1
 
-                # source_test_acc /= test_count
+                #source_test_acc /= test_count
                 resample_test_acc /= test_count
 
-                # print("{} Validation source accuracy = {:.4f}".format(datetime.now(), source_test_acc))
+                print("{} Validation source accuracy = {:.4f}".format(datetime.now(), source_test_acc))
                 print("{} Validation resample accuracy = {:.4f}".format(datetime.now(), resample_test_acc))
 
                 print("{} Saving checkpoint of model...".format(datetime.now()))

@@ -7,9 +7,9 @@ class DataGenerator:
     def __init__(self, mode, batch_size, source_classes_num, resample_classes_num):
         #self.write_to_tfrecord(mode)
         if mode == 'train':
-            self.data_size = 31513
+            self.data_size = 24220
         else:
-            self.data_size = 15756
+            self.data_size = 18232
         self.read_from_tfrecord(batch_size, source_classes_num, resample_classes_num, mode)
 
     def write_to_tfrecord(self, mode):
@@ -79,7 +79,7 @@ class DataGenerator:
                                        })  #取出包含image和label的feature对象
         #tf.decode_raw可以将字符串解析成图像对应的像素数组
         image = tf.decode_raw(features['img_raw'], tf.uint8)
-        image = tf.reshape(image, [64,64,3])
+        image = tf.reshape(image, [128,128,3])
         image = tf.cast(image, tf.float32)
         image = tf.image.per_image_standardization(image)
         source_label = tf.cast(features['source_label'], tf.int32)
@@ -90,14 +90,14 @@ class DataGenerator:
                 capacity = 5 * batch_size,
                 dtypes = [tf.float32, tf.int32, tf.int32],
                 # 图片数据尺寸，标签尺寸
-                shapes = [[64, 64, 3], (), ()])
+                shapes = [[128, 128, 3], (), ()])
             # 读线程的数量
             num_threads = 4
         else:
             example_queue = tf.FIFOQueue(
                 capacity = 3 * batch_size,
                 dtypes = [tf.float32, tf.int32, tf.int32],
-                shapes = [[64, 64, 3], (), ()])
+                shapes = [[128, 128, 3], (), ()])
             # 读线程的数量
             num_threads = 2
         # 数据入队操作

@@ -14,14 +14,20 @@ class FECNN(object):
         self.source_classes_num = source_classes_num
         self.resample_classes_num = resample_classes_num
         self.extract_feature()
-        # self.source_discriminator()
-        #self.resample_discriminator()
+        self.source_discriminator()
+        self.resample_discriminator()
 
     # network for feature extraction
     def extract_feature(self):
-        # with tf.variable_scope("extract_feature") as scope:
+        with tf.variable_scope("extract_feature") as scope:
+            # 0st Layer: Conv -> pooling
+            conv0_1 = conv(self.images, 3, 3, 16, 1, 1, name = 'conv0_1')
+            conv0_2 = conv(conv0_1, 3, 3, 16, 1, 1, name = 'conv0_2')
+            relu0 = relu(conv0_2, name = 'relu0')
+            pool0 = max_pool(relu0, 2, 2, 2, 2, padding = 'VALID', name = 'pool0')
+
             # 1st Layer: Conv -> pooling
-            conv1 = conv(self.images, 3, 3, 32, 1, 1, name = 'conv1')
+            conv1 = conv(pool0, 3, 3, 32, 1, 1, name = 'conv1')
             relu1 = relu(conv1, name = 'relu1')
             pool1 = max_pool(relu1, 2, 2, 2, 2, padding = 'VALID', name = 'pool1')
 
@@ -43,29 +49,24 @@ class FECNN(object):
             flattened = tf.reshape(conv4, [-1, 72*6*6], name = 'flattened')
             fc = fully_connected(flattened, 512, name='fc')
             self.features = relu(fc, name = 'relu5')
-            fc1 = fully_connected(self.features, 128, name='fc1')
-            relu_1 = relu(fc1, name = 'relu1')
-            fc2 = fully_connected(relu_1, self.resample_classes_num, name='fc2')
-            self.resample_logits = relu(fc2, name = 'relu2')
-            self.resample_pred = tf.nn.softmax(self.resample_logits, name='source_logits')
 
     # network for discriminating camera source
-    # def source_discriminator(self):
-    #     with tf.variable_scope("camera_source_discriminator") as scope:
-    #         fc1 = fully_connected(self.features, 128, name='fc1')
-    #         relu1 = relu(fc1, name = 'relu1')
-    #         fc2 = fully_connected(relu1, self.source_classes_num, name='fc2')
-    #         self.source_logits = relu(fc2, name = 'relu2')
-    #         self.source_pred = tf.nn.softmax(self.source_logits, name='source_logits')
+    def source_discriminator(self):
+        with tf.variable_scope("camera_source_discriminator") as scope:
+            fc1 = fully_connected(self.features, 128, name='fc1')
+            relu1 = relu(fc1, name = 'relu1')
+            fc2 = fully_connected(relu1, self.source_classes_num, name='fc2')
+            self.source_logits = relu(fc2, name = 'relu2')
+            self.source_pred = tf.nn.softmax(self.source_logits, name='source_logits')
     #
     # # network for discriminating resample operation
-    # def resample_discriminator(self):
-    #     with tf.variable_scope("resample_operation_discriminator") as scope:
-    #         fc1 = fully_connected(self.features, 128, name='fc1')
-    #         relu1 = relu(fc1, name = 'relu1')
-    #         fc2 = fully_connected(relu1, self.resample_classes_num, name='fc2')
-    #         self.resample_logits = relu(fc2, name = 'relu2')
-    #         self.resample_pred = tf.nn.softmax(self.resample_logits, name='resample_logits')
+    def resample_discriminator(self):
+        with tf.variable_scope("resample_operation_discriminator") as scope:
+            fc1 = fully_connected(self.features, 128, name='fc1')
+            relu1 = relu(fc1, name = 'relu1')
+            fc2 = fully_connected(relu1, self.resample_classes_num, name='fc2')
+            self.resample_logits = relu(fc2, name = 'relu2')
+            self.resample_pred = tf.nn.softmax(self.resample_logits, name='resample_logits')
 
 # convolution operation
 def conv(inputs, filter_height, filter_width, num_filters, stride_y, stride_x, name, padding='SAME'):
